@@ -163,10 +163,18 @@ fe_month %>%
 Now, what if we wanted to have month as part of the column name instead?  
 
 ```{r fe_month_sum_wide}
-fe_month_sum_wide 
-  # Rounding to one decimal point
+fe_month_sum_wide <- fe_month_sum %>%
+  mutate(month_abb = factor(month_abb, levels = month.abb)) %>%
+  pivot_wider(
+    id_cols    = c(year, site, strength_gtex),
+    names_from = month_abb,
+    values_from = mean_dayl.s:sum_prcp.mm,
+    names_glue = "{month_abb}_{.value}",
+    values_fn  = mean   # protects you if duplicates exist
+  ) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 1)))
 
-fe_month_sum_wide  
+fe_month_sum_wide 
 ```
 Notice how we are back at **698** rows.  
 
@@ -180,15 +188,48 @@ Let's make a ridge plot to visualize the distribution of one variable over month
 ```{r}
 #install.packages("ggridges")
 library(ggridges)
-
-
+library(ggplot2)
+ggplot(data = fe_month_sum,
+      aes( y = month_abb,
+           x = mean_tmax.c,
+           fill = stat(x)) 
+        )+
+geom_density_ridges_gradient(scale = 3,
+                    rel_min_height = 0.01) +
+  scale_fill_viridis_c(option = "C", alpha = .8) +
+theme(legend.position = "right")
 ```
 
-Now let's do that for all variables.  
+geNow let's do that for all variables.  
 ```{r}
-finalplots 
-  
-  
+library(ggridges)
+library(ggplot2)
+library(tidyverse)
+library(viridis)
+
+finalplots <- fe_month_sum %>%
+  pivot_longer(
+    cols = mean_dayl.s:sum_prcp.mm,
+    names_to = "name",
+    values_to = "value"
+  ) %>%
+  mutate(
+    month_abb = factor(month_abb, levels = month.abb)  # important
+  ) %>%
+  group_by(name) %>%
+  nest() %>%
+  mutate(
+    plot = map2(data, name, ~
+      ggplot(.x, aes(y = month_abb, x = value, fill = after_stat(x))) +
+        geom_density_ridges_gradient(scale = 3, rel_min_height = 0.01) +
+        scale_fill_viridis_c(option = "C") +   # remove alpha for stronger color
+        theme_minimal() +
+        theme(legend.position = "right") +     # turn on to confirm colors
+        labs(x = .y, y = "month", fill = .y)
+    )
+  )
+finalplots <- finalplots %>%
+  mutate(plot = map(plot, ~ .x + theme(legend.position = "none")))
 ```
 
 ```{r}
